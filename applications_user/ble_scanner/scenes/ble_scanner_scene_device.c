@@ -182,12 +182,6 @@ static bool ble_scanner_device_input_callback(InputEvent* event, void* context) 
 void ble_scanner_scene_device_on_enter(void* context) {
     BleScannerApp* app = context;
 
-    app->connected = false;
-    app->discovering = false;
-    app->gatt_service_count = 0;
-    app->gatt_char_count = 0;
-    app->device_scroll = 0;
-
     // Create device view on first entry, reuse on subsequent entries
     if(!app->device_view) {
         app->device_view = view_alloc();
@@ -202,27 +196,35 @@ void ble_scanner_scene_device_on_enter(void* context) {
 
     view_dispatcher_switch_to_view(app->view_dispatcher, BleScannerViewDevice);
 
-    // Allocate GATT client
-    app->gatt_client = ble_gatt_client_alloc();
+    // Only connect if coming from scan (gatt_client == NULL).
+    // When returning from service scene, gatt_client is still alive — just show the view.
+    if(!app->gatt_client) {
+        app->connected = false;
+        app->discovering = false;
+        app->gatt_service_count = 0;
+        app->gatt_char_count = 0;
+        app->device_scroll = 0;
 
-    // Initiate connection (blocks ~5ms — just enqueues GAP command)
-    uint16_t idx = scene_manager_get_scene_state(app->scene_manager, BleScannerSceneScan);
-    BleScannerDevice* dev = &app->devices[idx];
-    FURI_LOG_I(
-        TAG,
-        "Connecting to %02X:%02X:%02X:%02X:%02X:%02X",
-        dev->address[0],
-        dev->address[1],
-        dev->address[2],
-        dev->address[3],
-        dev->address[4],
-        dev->address[5]);
-    bool result = bt_connect(app->bt, dev->address, dev->address_type);
-    if(result) {
-        app->connection_retries = 20; // 20 × 250ms tick = 5s timeout
-    } else {
-        FURI_LOG_E(TAG, "Connection initiation failed");
-        app->connection_retries = 0;
+        app->gatt_client = ble_gatt_client_alloc();
+
+        uint16_t idx = scene_manager_get_scene_state(app->scene_manager, BleScannerSceneScan);
+        BleScannerDevice* dev = &app->devices[idx];
+        FURI_LOG_I(
+            TAG,
+            "Connecting to %02X:%02X:%02X:%02X:%02X:%02X",
+            dev->address[0],
+            dev->address[1],
+            dev->address[2],
+            dev->address[3],
+            dev->address[4],
+            dev->address[5]);
+        bool result = bt_connect(app->bt, dev->address, dev->address_type);
+        if(result) {
+            app->connection_retries = 20; // 20 × 250ms tick = 5s timeout
+        } else {
+            FURI_LOG_E(TAG, "Connection initiation failed");
+            app->connection_retries = 0;
+        }
     }
 }
 
@@ -274,6 +276,16 @@ bool ble_scanner_scene_device_on_event(void* context, SceneManagerEvent event) {
         default:
             break;
         }
+    } else if(event.type == SceneManagerEventTypeBack) {
+        // Going back to scan — disconnect and free GATT client
+        app->connection_retries = 0;
+        bt_disconnect_central(app->bt);
+        app->connected = false;
+        if(app->gatt_client) {
+            ble_gatt_client_free(app->gatt_client);
+            app->gatt_client = NULL;
+        }
+        // Don't consume — let scene_manager handle the back navigation
     }
 
     return consumed;
@@ -281,19 +293,7 @@ bool ble_scanner_scene_device_on_event(void* context, SceneManagerEvent event) {
 
 void ble_scanner_scene_device_on_exit(void* context) {
     BleScannerApp* app = context;
-
-    // Stop connection polling
     app->connection_retries = 0;
-
-    // Disconnect or cancel pending connection
-    bt_disconnect_central(app->bt);
-    app->connected = false;
-
-    // Free GATT client
-    if(app->gatt_client) {
-        ble_gatt_client_free(app->gatt_client);
-        app->gatt_client = NULL;
-    }
-
-    // View stays registered — freed in app_free
+    // Connection/GATT cleanup handled by Back event handler, not here,
+    // because on_exit also fires when navigating forward to service scene.
 }
