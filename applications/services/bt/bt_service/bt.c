@@ -621,14 +621,23 @@ int32_t bt_srv(void* p) {
                 message.data.scan.context);
             if(message.result) *message.result = result;
         } else if(message.type == BtMessageTypeScanStop) {
-            furi_hal_bt_stop_scan();
-            bt->scanning = false;
-            bt->scan_callback = NULL;
-            bt->scan_context = NULL;
-            if(bt->bt_settings.enabled) {
-                furi_hal_bt_start_advertising();
+            if(bt->scanning) {
+                furi_hal_bt_stop_scan();
+                bt->scanning = false;
+                bt->scan_callback = NULL;
+                bt->scan_context = NULL;
+                if(bt->bt_settings.enabled) {
+                    furi_hal_bt_start_advertising();
+                }
             }
         } else if(message.type == BtMessageTypeConnect) {
+            // Stop scanning if still active before connecting
+            if(bt->scanning) {
+                furi_hal_bt_stop_scan();
+                bt->scanning = false;
+                bt->scan_callback = NULL;
+                bt->scan_context = NULL;
+            }
             GapConnectParams params = {
                 .peer_address_type = message.data.connect.address_type,
                 .conn_interval_min = 0x0018,

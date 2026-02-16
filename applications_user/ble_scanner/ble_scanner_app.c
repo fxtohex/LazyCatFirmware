@@ -5,12 +5,20 @@
 
 static void ble_scanner_tick_callback(void* context) {
     BleScannerApp* app = context;
+
+    // Scan scene: periodic redraw from BLE callback flag
     if(app->needs_redraw) {
         app->needs_redraw = false;
         if(app->scan_view) {
             with_view_model(
                 app->scan_view, BleScannerApp** model, { UNUSED(model); }, true);
         }
+    }
+
+    // Device scene: poll connection handle asynchronously
+    if(app->device_view && app->connection_retries > 0) {
+        view_dispatcher_send_custom_event(
+            app->view_dispatcher, BleScannerCustomEventConnectionTick);
     }
 }
 
@@ -59,6 +67,20 @@ static BleScannerApp* ble_scanner_app_alloc(void) {
 
 static void ble_scanner_app_free(BleScannerApp* app) {
     furi_assert(app);
+
+    // Remove and free views
+    if(app->scan_view) {
+        view_dispatcher_remove_view(app->view_dispatcher, BleScannerViewScan);
+        view_free(app->scan_view);
+    }
+    if(app->device_view) {
+        view_dispatcher_remove_view(app->view_dispatcher, BleScannerViewDevice);
+        view_free(app->device_view);
+    }
+    if(app->service_view) {
+        view_dispatcher_remove_view(app->view_dispatcher, BleScannerViewService);
+        view_free(app->service_view);
+    }
 
     // Free scene manager and view dispatcher
     scene_manager_free(app->scene_manager);

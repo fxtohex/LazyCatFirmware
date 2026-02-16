@@ -49,18 +49,31 @@ typedef struct {
     BleGattClientCharacteristic gatt_chars[BLE_SCANNER_MAX_CHARS];
     uint8_t gatt_char_count;
     int16_t device_scroll;
+    uint8_t connection_retries;
+
+    // Service detail / characteristic state
+    View* service_view;
+    uint8_t selected_service;
+    int16_t service_scroll;
+    uint8_t read_buf[BLE_GATT_CLIENT_MAX_VALUE_LEN];
+    uint16_t read_len;
+    bool reading;
 } BleScannerApp;
 
 typedef enum {
     BleScannerViewScan,
     BleScannerViewDevice,
+    BleScannerViewService,
 } BleScannerView;
 
 typedef enum {
     BleScannerCustomEventToggleScan,
     BleScannerCustomEventRefresh,
     BleScannerCustomEventConnected,
+    BleScannerCustomEventConnectionTick,
     BleScannerCustomEventDisconnected,
+    BleScannerCustomEventServiceSelected,
     BleScannerCustomEventServicesDiscovered,
-    BleScannerCustomEventCharsDiscovered,
+    BleScannerCustomEventCharsReady,
+    BleScannerCustomEventReadDone,
 } BleScannerCustomEvent;

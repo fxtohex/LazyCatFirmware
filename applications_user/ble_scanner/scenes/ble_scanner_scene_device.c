@@ -60,7 +60,9 @@ static void ble_scanner_device_draw_callback(Canvas* canvas, void* model) {
 
     if(!app->connected) {
         canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str_aligned(canvas, 64, 38, AlignCenter, AlignCenter, "Connecting...");
+        const char* status_text =
+            (app->connection_retries > 0) ? "Connecting..." : "Connection failed";
+        canvas_draw_str_aligned(canvas, 64, 38, AlignCenter, AlignCenter, status_text);
     } else if(app->discovering) {
         canvas_set_font(canvas, FontSecondary);
         canvas_draw_str_aligned(canvas, 64, 38, AlignCenter, AlignCenter, "Discovering...");
@@ -119,25 +121,44 @@ static void ble_scanner_device_draw_callback(Canvas* canvas, void* model) {
 
     // Bottom hint
     canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str_aligned(canvas, 64, 63, AlignCenter, AlignBottom, "Back: Disconnect");
+    if(app->connected && !app->discovering && app->gatt_service_count > 0) {
+        canvas_draw_str_aligned(canvas, 0, 63, AlignLeft, AlignBottom, "OK:View");
+        canvas_draw_str_aligned(canvas, 127, 63, AlignRight, AlignBottom, "Back");
+    } else {
+        canvas_draw_str_aligned(canvas, 64, 63, AlignCenter, AlignBottom, "Back: Disconnect");
+    }
 }
 
 static bool ble_scanner_device_input_callback(InputEvent* event, void* context) {
     View* view = context;
     BleScannerApp* app = *(BleScannerApp**)view_get_model(view);
+
+    int16_t sel = app->device_scroll;
+    uint8_t count = app->gatt_service_count;
+    bool is_connected = app->connected && !app->discovering;
+    ViewDispatcher* vd = app->view_dispatcher;
+
     bool consumed = false;
+    bool need_redraw = false;
 
     if(event->type == InputTypeShort || event->type == InputTypeRepeat) {
         switch(event->key) {
         case InputKeyUp:
-            if(app->device_scroll > 0) {
+            if(sel > 0) {
                 app->device_scroll--;
                 consumed = true;
+                need_redraw = true;
             }
             break;
         case InputKeyDown:
-            if(app->device_scroll < (int16_t)app->gatt_service_count - 1) {
+            if(sel < (int16_t)count - 1) {
                 app->device_scroll++;
+                consumed = true;
+                need_redraw = true;
+            }
+            break;
+        case InputKeyOk:
+            if(is_connected && count > 0 && sel < count) {
                 consumed = true;
             }
             break;
@@ -146,10 +167,13 @@ static bool ble_scanner_device_input_callback(InputEvent* event, void* context) 
         }
     }
 
-    if(consumed) {
-        view_commit_model(view, true);
-    } else {
-        view_commit_model(view, false);
+    view_commit_model(view, need_redraw);
+
+    // Navigate to service scene after releasing model lock
+    if(event->type == InputTypeShort && event->key == InputKeyOk &&
+       is_connected && count > 0 && sel < count) {
+        app->selected_service = sel;
+        view_dispatcher_send_custom_event(vd, BleScannerCustomEventServiceSelected);
     }
 
     return consumed;
@@ -158,31 +182,31 @@ static bool ble_scanner_device_input_callback(InputEvent* event, void* context) 
 void ble_scanner_scene_device_on_enter(void* context) {
     BleScannerApp* app = context;
 
-    // Get selected device index from scan scene state
-    uint16_t idx = scene_manager_get_scene_state(app->scene_manager, BleScannerSceneScan);
-
     app->connected = false;
     app->discovering = false;
     app->gatt_service_count = 0;
     app->gatt_char_count = 0;
     app->device_scroll = 0;
 
-    // Create device view
-    app->device_view = view_alloc();
-    view_allocate_model(app->device_view, ViewModelTypeLocking, sizeof(BleScannerApp*));
-    with_view_model(
-        app->device_view, BleScannerApp** model, { *model = app; }, false);
-    view_set_context(app->device_view, app->device_view);
-    view_set_draw_callback(app->device_view, ble_scanner_device_draw_callback);
-    view_set_input_callback(app->device_view, ble_scanner_device_input_callback);
+    // Create device view on first entry, reuse on subsequent entries
+    if(!app->device_view) {
+        app->device_view = view_alloc();
+        view_allocate_model(app->device_view, ViewModelTypeLocking, sizeof(BleScannerApp*));
+        with_view_model(
+            app->device_view, BleScannerApp** model, { *model = app; }, false);
+        view_set_context(app->device_view, app->device_view);
+        view_set_draw_callback(app->device_view, ble_scanner_device_draw_callback);
+        view_set_input_callback(app->device_view, ble_scanner_device_input_callback);
+        view_dispatcher_add_view(app->view_dispatcher, BleScannerViewDevice, app->device_view);
+    }
 
-    view_dispatcher_add_view(app->view_dispatcher, BleScannerViewDevice, app->device_view);
     view_dispatcher_switch_to_view(app->view_dispatcher, BleScannerViewDevice);
 
     // Allocate GATT client
     app->gatt_client = ble_gatt_client_alloc();
 
-    // Initiate connection
+    // Initiate connection (blocks ~5ms — just enqueues GAP command)
+    uint16_t idx = scene_manager_get_scene_state(app->scene_manager, BleScannerSceneScan);
     BleScannerDevice* dev = &app->devices[idx];
     FURI_LOG_I(
         TAG,
@@ -193,35 +217,13 @@ void ble_scanner_scene_device_on_enter(void* context) {
         dev->address[3],
         dev->address[4],
         dev->address[5]);
-
     bool result = bt_connect(app->bt, dev->address, dev->address_type);
     if(result) {
-        // Wait for connection to be established
-        // Poll for connection handle with timeout
-        app->connected = false;
-        for(int retries = 0; retries < 50; retries++) {
-            furi_delay_ms(100);
-            uint16_t handle = bt_get_central_conn_handle(app->bt);
-            if(handle != 0xFFFF) {
-                app->connected = true;
-                ble_gatt_client_set_connection(app->gatt_client, handle);
-                FURI_LOG_I(TAG, "Connected, handle: %04X", handle);
-                // Start service discovery
-                app->discovering = true;
-                ble_gatt_client_discover_services(
-                    app->gatt_client, ble_scanner_device_services_cb, app);
-                break;
-            }
-        }
-        if(!app->connected) {
-            FURI_LOG_E(TAG, "Connection timed out");
-        }
+        app->connection_retries = 20; // 20 × 250ms tick = 5s timeout
     } else {
         FURI_LOG_E(TAG, "Connection initiation failed");
+        app->connection_retries = 0;
     }
-
-    with_view_model(
-        app->device_view, BleScannerApp** model, { UNUSED(model); }, true);
 }
 
 bool ble_scanner_scene_device_on_event(void* context, SceneManagerEvent event) {
@@ -230,6 +232,32 @@ bool ble_scanner_scene_device_on_event(void* context, SceneManagerEvent event) {
 
     if(event.type == SceneManagerEventTypeCustom) {
         switch(event.event) {
+        case BleScannerCustomEventConnectionTick:
+            if(!app->connected && app->connection_retries > 0) {
+                uint16_t handle = bt_get_central_conn_handle(app->bt);
+                if(handle != 0xFFFF) {
+                    app->connected = true;
+                    app->connection_retries = 0;
+                    ble_gatt_client_set_connection(app->gatt_client, handle);
+                    FURI_LOG_I(TAG, "Connected, handle: %04X", handle);
+                    app->discovering = true;
+                    ble_gatt_client_discover_services(
+                        app->gatt_client, ble_scanner_device_services_cb, app);
+                } else {
+                    app->connection_retries--;
+                    if(app->connection_retries == 0) {
+                        FURI_LOG_E(TAG, "Connection timed out");
+                    }
+                }
+                with_view_model(
+                    app->device_view, BleScannerApp** model, { UNUSED(model); }, true);
+            }
+            consumed = true;
+            break;
+        case BleScannerCustomEventServiceSelected:
+            scene_manager_next_scene(app->scene_manager, BleScannerSceneService);
+            consumed = true;
+            break;
         case BleScannerCustomEventServicesDiscovered:
             with_view_model(
                 app->device_view, BleScannerApp** model, { UNUSED(model); }, true);
@@ -254,11 +282,12 @@ bool ble_scanner_scene_device_on_event(void* context, SceneManagerEvent event) {
 void ble_scanner_scene_device_on_exit(void* context) {
     BleScannerApp* app = context;
 
-    // Disconnect if still connected
-    if(app->connected) {
-        bt_disconnect_central(app->bt);
-        app->connected = false;
-    }
+    // Stop connection polling
+    app->connection_retries = 0;
+
+    // Disconnect or cancel pending connection
+    bt_disconnect_central(app->bt);
+    app->connected = false;
 
     // Free GATT client
     if(app->gatt_client) {
@@ -266,9 +295,5 @@ void ble_scanner_scene_device_on_exit(void* context) {
         app->gatt_client = NULL;
     }
 
-    view_dispatcher_remove_view(app->view_dispatcher, BleScannerViewDevice);
-    if(app->device_view) {
-        view_free(app->device_view);
-        app->device_view = NULL;
-    }
+    // View stays registered — freed in app_free
 }

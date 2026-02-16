@@ -297,16 +297,18 @@ void ble_scanner_scene_scan_on_enter(void* context) {
     app->scanning = false;
     furi_mutex_release(app->data_mutex);
 
-    // Create and configure the scan view
-    app->scan_view = view_alloc();
-    view_allocate_model(app->scan_view, ViewModelTypeLocking, sizeof(BleScannerApp*));
-    with_view_model(
-        app->scan_view, BleScannerApp** model, { *model = app; }, false);
-    view_set_context(app->scan_view, app->scan_view);
-    view_set_draw_callback(app->scan_view, ble_scanner_scan_draw_callback);
-    view_set_input_callback(app->scan_view, ble_scanner_scan_input_callback);
+    // Create scan view on first entry, reuse on subsequent entries
+    if(!app->scan_view) {
+        app->scan_view = view_alloc();
+        view_allocate_model(app->scan_view, ViewModelTypeLocking, sizeof(BleScannerApp*));
+        with_view_model(
+            app->scan_view, BleScannerApp** model, { *model = app; }, false);
+        view_set_context(app->scan_view, app->scan_view);
+        view_set_draw_callback(app->scan_view, ble_scanner_scan_draw_callback);
+        view_set_input_callback(app->scan_view, ble_scanner_scan_input_callback);
+        view_dispatcher_add_view(app->view_dispatcher, BleScannerViewScan, app->scan_view);
+    }
 
-    view_dispatcher_add_view(app->view_dispatcher, BleScannerViewScan, app->scan_view);
     view_dispatcher_switch_to_view(app->view_dispatcher, BleScannerViewScan);
 }
 
@@ -328,7 +330,6 @@ bool ble_scanner_scene_scan_on_event(void* context, SceneManagerEvent event) {
             consumed = true;
             break;
         case BleScannerCustomEventConnected:
-            // Stop scan and navigate to device detail
             ble_scanner_stop_scan(app);
             scene_manager_next_scene(app->scene_manager, BleScannerSceneDevice);
             consumed = true;
@@ -347,10 +348,6 @@ bool ble_scanner_scene_scan_on_event(void* context, SceneManagerEvent event) {
 
 void ble_scanner_scene_scan_on_exit(void* context) {
     BleScannerApp* app = context;
-
     ble_scanner_stop_scan(app);
-
-    view_dispatcher_remove_view(app->view_dispatcher, BleScannerViewScan);
-    view_free(app->scan_view);
-    app->scan_view = NULL;
+    // View stays registered — freed in app_free
 }

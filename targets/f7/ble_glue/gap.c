@@ -213,17 +213,28 @@ BleEventFlowStatus ble_event_app_notification(void* pckt) {
 
             if(event->Role == 0x00) {
                 // Central role connection (we initiated)
-                gap->service.central_connection_handle = event->Connection_Handle;
-                gap->state = GapStateConnected;
-                FURI_LOG_I(
-                    TAG,
-                    "Central connected, handle: %04X",
-                    event->Connection_Handle);
-                GapEvent gap_event = {
-                    .type = GapEventTypeCentralConnected,
-                    .data.central_conn_handle = event->Connection_Handle,
-                };
-                gap->on_event_cb(gap_event, gap->context);
+                if(event->Status == 0x00) {
+                    gap->service.central_connection_handle = event->Connection_Handle;
+                    gap->state = GapStateConnected;
+                    FURI_LOG_I(
+                        TAG,
+                        "Central connected, handle: %04X",
+                        event->Connection_Handle);
+                    GapEvent gap_event = {
+                        .type = GapEventTypeCentralConnected,
+                        .data.central_conn_handle = event->Connection_Handle,
+                    };
+                    gap->on_event_cb(gap_event, gap->context);
+                } else {
+                    FURI_LOG_E(
+                        TAG,
+                        "Central connection failed, status: %02X",
+                        event->Status);
+                    gap->state = GapStateIdle;
+                    if(gap->enable_adv) {
+                        gap_advertise_start(GapStateAdvFast);
+                    }
+                }
             } else {
                 // Peripheral role connection (someone connected to us)
                 gap->connection_params.conn_interval = event->Conn_Interval;
@@ -693,7 +704,21 @@ static void gap_connect_impl(void) {
 }
 
 static void gap_disconnect_central_impl(void) {
-    if(gap->service.central_connection_handle != 0xFFFF) {
+    if(gap->state == GapStateConnecting) {
+        // Cancel pending connection attempt
+        tBleStatus status = hci_le_create_connection_cancel();
+        if(status != BLE_STATUS_SUCCESS) {
+            FURI_LOG_E(TAG, "Connection cancel failed: %d", status);
+            // Force recovery: return to idle and restart advertising
+            gap->state = GapStateIdle;
+            if(gap->enable_adv) {
+                gap_advertise_start(GapStateAdvFast);
+            }
+        } else {
+            FURI_LOG_I(TAG, "Connection cancel initiated");
+            // HCI_LE_CONNECTION_COMPLETE with error status will handle state transition
+        }
+    } else if(gap->service.central_connection_handle != 0xFFFF) {
         tBleStatus status = hci_disconnect(gap->service.central_connection_handle, 0x13);
         if(status != BLE_STATUS_SUCCESS) {
             FURI_LOG_E(TAG, "Central disconnect failed: %d", status);
