@@ -296,6 +296,38 @@ bool furi_hal_bt_extra_beacon_is_active(void);
  */
 const GapExtraBeaconConfig* furi_hal_bt_extra_beacon_get_config(void);
 
+/**
+ * BLE Scanning and Central Connection API
+ */
+
+typedef void (*FuriHalBtScanCallback)(GapScanResult* result, void* context);
+
+typedef struct {
+    uint16_t interval_ms;
+    uint16_t window_ms;
+    bool active;
+    bool filter_duplicates;
+    uint32_t timeout_ms;
+} FuriHalBtScanParams;
+
+bool furi_hal_bt_start_scan(
+    const FuriHalBtScanParams* params,
+    FuriHalBtScanCallback callback,
+    void* context);
+
+void furi_hal_bt_stop_scan(void);
+
+bool furi_hal_bt_is_scanning(void);
+
+/** Forward a scan result to the registered scan callback.
+ *  Called by the BT service when a GapEventTypeScanResult arrives.
+ */
+void furi_hal_bt_on_scan_result(GapScanResult* result);
+
+bool furi_hal_bt_connect(const GapConnectParams* params);
+
+void furi_hal_bt_disconnect_central(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -563,6 +563,7 @@ int32_t desktop_srv(void* p) {
     desktop_init_settings(desktop);
 
     scene_manager_next_scene(desktop->scene_manager, DesktopSceneMain);
+    scene_manager_next_scene(desktop->scene_manager, DesktopSceneBootSplash);
 
     bool enable_cli_vcp = true;
     if(desktop_pin_code_is_set() &&

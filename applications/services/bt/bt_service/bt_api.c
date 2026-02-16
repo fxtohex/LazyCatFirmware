@@ -1,4 +1,5 @@
 #include "bt_i.h"
+#include <string.h>
 #include <profiles/serial_profile.h>
 
 FuriHalBleProfileBase* bt_profile_start(
@@ -76,4 +77,74 @@ void bt_keys_storage_set_default_path(Bt* bt) {
     furi_check(bt->keys_storage);
 
     bt_keys_storage_set_file_path(bt->keys_storage, BT_KEYS_STORAGE_PATH);
+}
+
+bool bt_start_scan(Bt* bt, FuriHalBtScanParams* params, FuriHalBtScanCallback cb, void* ctx) {
+    furi_check(bt);
+    furi_check(params);
+    furi_check(cb);
+
+    bool result = false;
+    BtMessage message = {
+        .lock = api_lock_alloc_locked(),
+        .type = BtMessageTypeScanStart,
+        .data.scan =
+            {
+                .params = *params,
+                .callback = cb,
+                .context = ctx,
+            },
+        .result = &result,
+    };
+    furi_check(
+        furi_message_queue_put(bt->message_queue, &message, FuriWaitForever) == FuriStatusOk);
+    api_lock_wait_unlock_and_free(message.lock);
+    return result;
+}
+
+void bt_stop_scan(Bt* bt) {
+    furi_check(bt);
+
+    BtMessage message = {
+        .lock = api_lock_alloc_locked(),
+        .type = BtMessageTypeScanStop,
+    };
+    furi_check(
+        furi_message_queue_put(bt->message_queue, &message, FuriWaitForever) == FuriStatusOk);
+    api_lock_wait_unlock_and_free(message.lock);
+}
+
+bool bt_connect(Bt* bt, const uint8_t* address, uint8_t address_type) {
+    furi_check(bt);
+    furi_check(address);
+
+    bool result = false;
+    BtMessage message = {
+        .lock = api_lock_alloc_locked(),
+        .type = BtMessageTypeConnect,
+        .result = &result,
+    };
+    memcpy(message.data.connect.address, address, 6);
+    message.data.connect.address_type = address_type;
+    furi_check(
+        furi_message_queue_put(bt->message_queue, &message, FuriWaitForever) == FuriStatusOk);
+    api_lock_wait_unlock_and_free(message.lock);
+    return result;
+}
+
+void bt_disconnect_central(Bt* bt) {
+    furi_check(bt);
+
+    BtMessage message = {
+        .lock = api_lock_alloc_locked(),
+        .type = BtMessageTypeDisconnectCentral,
+    };
+    furi_check(
+        furi_message_queue_put(bt->message_queue, &message, FuriWaitForever) == FuriStatusOk);
+    api_lock_wait_unlock_and_free(message.lock);
+}
+
+uint16_t bt_get_central_conn_handle(Bt* bt) {
+    furi_check(bt);
+    return bt->central_conn_handle;
 }

@@ -33,6 +33,10 @@ typedef enum {
     BtMessageTypeGetSettings,
     BtMessageTypeSetSettings,
     BtMessageTypeReloadKeysSettings,
+    BtMessageTypeScanStart,
+    BtMessageTypeScanStop,
+    BtMessageTypeConnect,
+    BtMessageTypeDisconnectCentral,
 } BtMessageType;
 
 typedef struct {
@@ -52,6 +56,15 @@ typedef union {
     BtKeyStorageUpdateData key_storage_data;
     BtSettings* settings;
     const BtSettings* csettings;
+    struct {
+        FuriHalBtScanParams params;
+        FuriHalBtScanCallback callback;
+        void* context;
+    } scan;
+    struct {
+        uint8_t address[6];
+        uint8_t address_type;
+    } connect;
 } BtMessageData;
 
 typedef struct {
@@ -88,6 +101,10 @@ struct Bt {
     void* status_changed_ctx;
 
     bool suppress_pin_screen;
+    bool scanning;
+    FuriHalBtScanCallback scan_callback;
+    void* scan_context;
+    uint16_t central_conn_handle; // 0xFFFF = not connected
 };
 
 /** Open a new RPC connection

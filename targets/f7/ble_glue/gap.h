@@ -26,11 +26,43 @@ typedef enum {
     GapEventTypeUpdateMTU,
     GapEventTypeBeaconStart,
     GapEventTypeBeaconStop,
+    GapEventTypeScanResult,
+    GapEventTypeScanComplete,
+    GapEventTypeCentralConnected,
+    GapEventTypeCentralDisconnected,
 } GapEventType;
+
+typedef struct {
+    uint8_t address[GAP_MAC_ADDR_SIZE];
+    uint8_t address_type;
+    int8_t rssi;
+    uint8_t event_type;
+    uint8_t data_len;
+    uint8_t data[31];
+} GapScanResult;
+
+typedef struct {
+    uint16_t interval; // N * 0.625 ms
+    uint16_t window; // N * 0.625 ms
+    bool active; // true=active scan (sends SCAN_REQ)
+    bool filter_duplicates;
+    uint32_t timeout_ms; // 0 = indefinite
+} GapScanParams;
+
+typedef struct {
+    uint8_t peer_address[GAP_MAC_ADDR_SIZE];
+    uint8_t peer_address_type;
+    uint16_t conn_interval_min; // N * 1.25 ms
+    uint16_t conn_interval_max; // N * 1.25 ms
+    uint16_t slave_latency;
+    uint16_t supervision_timeout; // N * 10 ms
+} GapConnectParams;
 
 typedef union {
     uint32_t pin_code;
     uint16_t max_packet_size;
+    GapScanResult scan_result;
+    uint16_t central_conn_handle;
 } GapEventData;
 
 typedef struct {
@@ -47,6 +79,8 @@ typedef enum {
     GapStateAdvFast,
     GapStateAdvLowPower,
     GapStateConnected,
+    GapStateScanning,
+    GapStateConnecting,
 } GapState;
 
 typedef enum {
@@ -107,6 +141,14 @@ GapState gap_get_state(void);
 void gap_thread_stop(void);
 
 void gap_emit_ble_beacon_status_event(bool active);
+
+bool gap_start_scan(const GapScanParams* params);
+
+void gap_stop_scan(void);
+
+bool gap_connect(const GapConnectParams* params);
+
+void gap_disconnect_central(void);
 
 #ifdef __cplusplus
 }

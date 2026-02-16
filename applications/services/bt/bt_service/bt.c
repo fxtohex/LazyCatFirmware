@@ -1,6 +1,7 @@
 #include "bt_i.h"
 #include "bt_keys_storage.h"
 
+#include <string.h>
 #include <core/check.h>
 #include <furi_hal_bt.h>
 #include <services/battery_service.h>
@@ -158,6 +159,7 @@ Bt* bt_alloc(void) {
     // Init default maximum packet size
     bt->max_packet_size = BLE_PROFILE_SERIAL_PACKET_SIZE_MAX;
     bt->current_profile = NULL;
+    bt->central_conn_handle = 0xFFFF;
     // Keys storage
     bt->keys_storage = bt_keys_storage_alloc(BT_KEYS_STORAGE_PATH);
     // Alloc queue
@@ -317,6 +319,22 @@ static bool bt_on_gap_event_callback(GapEvent event, void* context) {
     } else if(event.type == GapEventTypeBeaconStop) {
         bt->beacon_active = false;
         do_update_status = true;
+        ret = true;
+    } else if(event.type == GapEventTypeScanResult) {
+        if(bt->scan_callback) {
+            bt->scan_callback(&event.data.scan_result, bt->scan_context);
+        }
+        ret = true;
+    } else if(event.type == GapEventTypeScanComplete) {
+        bt->scanning = false;
+        bt->scan_callback = NULL;
+        bt->scan_context = NULL;
+        ret = true;
+    } else if(event.type == GapEventTypeCentralConnected) {
+        bt->central_conn_handle = event.data.central_conn_handle;
+        ret = true;
+    } else if(event.type == GapEventTypeCentralDisconnected) {
+        bt->central_conn_handle = 0xFFFF;
         ret = true;
     }
 
@@ -592,6 +610,37 @@ int32_t bt_srv(void* p) {
             bt_handle_set_settings(bt, &message);
         } else if(message.type == BtMessageTypeReloadKeysSettings) {
             bt_handle_reload_keys_settings(bt);
+        } else if(message.type == BtMessageTypeScanStart) {
+            bt->scanning = true;
+            bt->scan_callback = message.data.scan.callback;
+            bt->scan_context = message.data.scan.context;
+            furi_hal_bt_stop_advertising();
+            bool result = furi_hal_bt_start_scan(
+                &message.data.scan.params,
+                message.data.scan.callback,
+                message.data.scan.context);
+            if(message.result) *message.result = result;
+        } else if(message.type == BtMessageTypeScanStop) {
+            furi_hal_bt_stop_scan();
+            bt->scanning = false;
+            bt->scan_callback = NULL;
+            bt->scan_context = NULL;
+            if(bt->bt_settings.enabled) {
+                furi_hal_bt_start_advertising();
+            }
+        } else if(message.type == BtMessageTypeConnect) {
+            GapConnectParams params = {
+                .peer_address_type = message.data.connect.address_type,
+                .conn_interval_min = 0x0018,
+                .conn_interval_max = 0x0028,
+                .slave_latency = 0,
+                .supervision_timeout = 0x01F4,
+            };
+            memcpy(params.peer_address, message.data.connect.address, 6);
+            bool result = furi_hal_bt_connect(&params);
+            if(message.result) *message.result = result;
+        } else if(message.type == BtMessageTypeDisconnectCentral) {
+            furi_hal_bt_disconnect_central();
         }
 
         if(message.lock) api_lock_unlock(message.lock);

@@ -281,6 +281,7 @@ Header,+,lib/toolbox/varint.h,,
 Header,+,lib/toolbox/version.h,,
 Header,+,targets/f7/ble_glue/furi_ble/event_dispatcher.h,,
 Header,+,targets/f7/ble_glue/furi_ble/gatt.h,,
+Header,+,targets/f7/ble_glue/furi_ble/gatt_client.h,,
 Header,+,targets/f7/ble_glue/furi_ble/profile_interface.h,,
 Header,+,targets/f7/ble_glue/profiles/serial_profile.h,,
 Header,+,targets/f7/ble_glue/services/battery_service.h,,
@@ -758,6 +759,17 @@ Function,+,ble_event_dispatcher_unregister_svc_handler,void,GapSvcEventHandler*
 Function,+,ble_gatt_characteristic_delete,void,"uint16_t, BleGattCharacteristicInstance*"
 Function,+,ble_gatt_characteristic_init,void,"uint16_t, const BleGattCharacteristicParams*, BleGattCharacteristicInstance*"
 Function,+,ble_gatt_characteristic_update,_Bool,"uint16_t, BleGattCharacteristicInstance*, const void*"
+Function,+,ble_gatt_client_alloc,BleGattClient*,
+Function,+,ble_gatt_client_discover_characteristics,_Bool,"BleGattClient*, uint16_t, uint16_t, BleGattClientDiscoverCharsCallback, void*"
+Function,+,ble_gatt_client_discover_services,_Bool,"BleGattClient*, BleGattClientDiscoverServicesCallback, void*"
+Function,+,ble_gatt_client_free,void,BleGattClient*
+Function,+,ble_gatt_client_process_event,_Bool,"BleGattClient*, void*"
+Function,+,ble_gatt_client_read,_Bool,"BleGattClient*, uint16_t, BleGattClientReadCallback, void*"
+Function,+,ble_gatt_client_set_connection,void,"BleGattClient*, uint16_t"
+Function,+,ble_gatt_client_subscribe,_Bool,"BleGattClient*, uint16_t, _Bool, _Bool, BleGattClientNotifyCallback, void*"
+Function,+,ble_gatt_client_unsubscribe,_Bool,"BleGattClient*, uint16_t"
+Function,+,ble_gatt_client_write,_Bool,"BleGattClient*, uint16_t, const uint8_t*, uint16_t, BleGattClientWriteCallback, void*"
+Function,+,ble_gatt_client_write_no_resp,_Bool,"BleGattClient*, uint16_t, const uint8_t*, uint16_t"
 Function,+,ble_gatt_service_add,_Bool,"uint8_t, const Service_UUID_t*, uint8_t, uint8_t, uint16_t*"
 Function,+,ble_gatt_service_delete,_Bool,uint16_t
 Function,+,ble_glue_force_c2_mode,BleGlueCommandResult,BleGlueC2Mode
@@ -810,8 +822,11 @@ Function,+,ble_svc_serial_start,BleServiceSerial*,
 Function,+,ble_svc_serial_stop,void,BleServiceSerial*
 Function,+,ble_svc_serial_update_tx,_Bool,"BleServiceSerial*, uint8_t*, uint16_t"
 Function,-,bsearch,void*,"const void*, const void*, size_t, size_t, __compar_fn_t"
+Function,+,bt_connect,_Bool,"Bt*, const uint8_t*, uint8_t"
 Function,+,bt_disconnect,void,Bt*
+Function,+,bt_disconnect_central,void,Bt*
 Function,+,bt_forget_bonded_devices,void,Bt*
+Function,+,bt_get_central_conn_handle,uint16_t,Bt*
 Function,+,bt_keys_storage_alloc,BtKeysStorage*,const char*
 Function,+,bt_keys_storage_delete,_Bool,BtKeysStorage*
 Function,+,bt_keys_storage_free,void,BtKeysStorage*
@@ -826,6 +841,8 @@ Function,+,bt_keys_storage_update,_Bool,"BtKeysStorage*, uint8_t*, uint32_t"
 Function,+,bt_profile_restore_default,_Bool,Bt*
 Function,+,bt_profile_start,FuriHalBleProfileBase*,"Bt*, const FuriHalBleProfileTemplate*, FuriHalBleProfileParams"
 Function,+,bt_set_status_changed_callback,void,"Bt*, BtStatusChangedCallback, void*"
+Function,+,bt_start_scan,_Bool,"Bt*, FuriHalBtScanParams*, FuriHalBtScanCallback, void*"
+Function,+,bt_stop_scan,void,Bt*
 Function,+,buffered_file_stream_alloc,Stream*,Storage*
 Function,+,buffered_file_stream_close,_Bool,Stream*
 Function,+,buffered_file_stream_get_error,FS_Error,Stream*
@@ -1372,6 +1389,8 @@ Function,+,furi_hal_adc_release,void,FuriHalAdcHandle*
 Function,+,furi_hal_bt_change_app,FuriHalBleProfileBase*,"const FuriHalBleProfileTemplate*, FuriHalBleProfileParams, const GapRootSecurityKeys*, GapEventCallback, void*"
 Function,+,furi_hal_bt_check_profile_type,_Bool,"FuriHalBleProfileBase*, const FuriHalBleProfileTemplate*"
 Function,+,furi_hal_bt_clear_white_list,_Bool,
+Function,+,furi_hal_bt_connect,_Bool,const GapConnectParams*
+Function,+,furi_hal_bt_disconnect_central,void,
 Function,+,furi_hal_bt_dump_state,void,FuriString*
 Function,+,furi_hal_bt_ensure_c2_mode,_Bool,BleGlueC2Mode
 Function,+,furi_hal_bt_extra_beacon_get_config,const GapExtraBeaconConfig*,
@@ -1389,10 +1408,12 @@ Function,-,furi_hal_bt_init,void,
 Function,+,furi_hal_bt_is_active,_Bool,
 Function,+,furi_hal_bt_is_alive,_Bool,
 Function,+,furi_hal_bt_is_gatt_gap_supported,_Bool,
+Function,+,furi_hal_bt_is_scanning,_Bool,
 Function,+,furi_hal_bt_is_testing_supported,_Bool,
 Function,+,furi_hal_bt_lock_core2,void,
 Function,+,furi_hal_bt_nvm_sram_sem_acquire,void,
 Function,+,furi_hal_bt_nvm_sram_sem_release,void,
+Function,+,furi_hal_bt_on_scan_result,void,GapScanResult*
 Function,+,furi_hal_bt_reinit,void,
 Function,+,furi_hal_bt_set_key_storage_change_callback,void,"BleGlueKeyStorageChangedCallback, void*"
 Function,+,furi_hal_bt_start_advertising,void,
@@ -1401,10 +1422,12 @@ Function,+,furi_hal_bt_start_packet_rx,void,"uint8_t, uint8_t"
 Function,+,furi_hal_bt_start_packet_tx,void,"uint8_t, uint8_t, uint8_t"
 Function,+,furi_hal_bt_start_radio_stack,_Bool,
 Function,+,furi_hal_bt_start_rx,void,uint8_t
+Function,+,furi_hal_bt_start_scan,_Bool,"const FuriHalBtScanParams*, FuriHalBtScanCallback, void*"
 Function,+,furi_hal_bt_start_tone_tx,void,"uint8_t, uint8_t"
 Function,+,furi_hal_bt_stop_advertising,void,
 Function,+,furi_hal_bt_stop_packet_test,uint16_t,
 Function,+,furi_hal_bt_stop_rx,void,
+Function,+,furi_hal_bt_stop_scan,void,
 Function,+,furi_hal_bt_stop_tone_tx,void,
 Function,+,furi_hal_bt_unlock_core2,void,
 Function,+,furi_hal_bt_update_battery_level,void,uint8_t
@@ -2046,6 +2069,8 @@ Function,-,gamma,double,double
 Function,-,gamma_r,double,"double, int*"
 Function,-,gammaf,float,float
 Function,-,gammaf_r,float,"float, int*"
+Function,+,gap_connect,_Bool,const GapConnectParams*
+Function,+,gap_disconnect_central,void,
 Function,-,gap_emit_ble_beacon_status_event,void,_Bool
 Function,-,gap_extra_beacon_get_config,const GapExtraBeaconConfig*,
 Function,-,gap_extra_beacon_get_data,uint8_t,uint8_t*
@@ -2058,7 +2083,9 @@ Function,-,gap_extra_beacon_stop,_Bool,
 Function,-,gap_get_state,GapState,
 Function,-,gap_init,_Bool,"GapConfig*, const GapRootSecurityKeys*, GapEventCallback, void*"
 Function,-,gap_start_advertising,void,
+Function,+,gap_start_scan,_Bool,const GapScanParams*
 Function,-,gap_stop_advertising,void,
+Function,+,gap_stop_scan,void,
 Function,-,gap_thread_stop,void,
 Function,-,getc,int,FILE*
 Function,-,getc_unlocked,int,FILE*
@@ -3614,7 +3641,7 @@ Function,-,strupr,char*,char*
 Function,-,strverscmp,int,"const char*, const char*"
 Function,-,strxfrm,size_t,"char*, const char*, size_t"
 Function,-,strxfrm_l,size_t,"char*, const char*, size_t, locale_t"
-Function,+,subghz_app,int32_t,char*
+Function,-,subghz_app,int32_t,char*
 Function,+,subghz_block_generic_deserialize,SubGhzProtocolStatus,"SubGhzBlockGeneric*, FlipperFormat*"
 Function,+,subghz_block_generic_deserialize_check_count_bit,SubGhzProtocolStatus,"SubGhzBlockGeneric*, FlipperFormat*, uint16_t"
 Function,+,subghz_block_generic_get_preset_name,void,"const char*, FuriString*"

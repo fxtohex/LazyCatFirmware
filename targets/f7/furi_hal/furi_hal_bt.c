@@ -39,6 +39,9 @@ static FuriHalBt furi_hal_bt = {
 static FuriHalBleProfileBase* current_profile = NULL;
 static GapConfig current_config = {0};
 
+static FuriHalBtScanCallback bt_scan_callback = NULL;
+static void* bt_scan_context = NULL;
+
 void furi_hal_bt_init(void) {
     FURI_LOG_I(TAG, "Start BT initialization");
     furi_hal_bus_enable(FuriHalBusHSEM);
@@ -439,4 +442,52 @@ bool furi_hal_bt_extra_beacon_stop(void) {
 
 bool furi_hal_bt_extra_beacon_is_active(void) {
     return gap_extra_beacon_get_state() == GapExtraBeaconStateStarted;
+}
+
+#define MS_TO_BLE_SCAN_UNITS(ms) ((uint16_t)((ms) * 1000 / 625))
+
+bool furi_hal_bt_start_scan(
+    const FuriHalBtScanParams* params,
+    FuriHalBtScanCallback callback,
+    void* context) {
+    furi_check(params);
+    furi_check(callback);
+
+    bt_scan_callback = callback;
+    bt_scan_context = context;
+
+    GapScanParams gap_params = {
+        .interval = MS_TO_BLE_SCAN_UNITS(params->interval_ms),
+        .window = MS_TO_BLE_SCAN_UNITS(params->window_ms),
+        .active = params->active,
+        .filter_duplicates = params->filter_duplicates,
+        .timeout_ms = params->timeout_ms,
+    };
+
+    return gap_start_scan(&gap_params);
+}
+
+void furi_hal_bt_stop_scan(void) {
+    gap_stop_scan();
+    bt_scan_callback = NULL;
+    bt_scan_context = NULL;
+}
+
+bool furi_hal_bt_is_scanning(void) {
+    return gap_get_state() == GapStateScanning;
+}
+
+void furi_hal_bt_on_scan_result(GapScanResult* result) {
+    if(bt_scan_callback) {
+        bt_scan_callback(result, bt_scan_context);
+    }
+}
+
+bool furi_hal_bt_connect(const GapConnectParams* params) {
+    furi_check(params);
+    return gap_connect(params);
+}
+
+void furi_hal_bt_disconnect_central(void) {
+    gap_disconnect_central();
 }

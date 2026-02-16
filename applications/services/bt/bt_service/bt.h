@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <furi_ble/profile_interface.h>
+#include <furi_hal_bt.h>
 #include <core/common_defines.h>
 
 #ifdef __cplusplus
@@ -78,6 +79,46 @@ void bt_keys_storage_set_storage_path(Bt* bt, const char* keys_storage_path);
  * @param bt                    Bt instance
  */
 void bt_keys_storage_set_default_path(Bt* bt);
+
+/** Start BLE scanning
+ *
+ * @param bt        Bt instance
+ * @param params    Scan parameters
+ * @param cb        Callback for scan results
+ * @param ctx       Callback context
+ *
+ * @return          true on success
+ */
+bool bt_start_scan(Bt* bt, FuriHalBtScanParams* params, FuriHalBtScanCallback cb, void* ctx);
+
+/** Stop BLE scanning
+ *
+ * @param bt        Bt instance
+ */
+void bt_stop_scan(Bt* bt);
+
+/** Connect to a BLE peripheral
+ *
+ * @param bt            Bt instance
+ * @param address       6-byte BLE address of the peripheral
+ * @param address_type  Address type (public or random)
+ *
+ * @return              true on success
+ */
+bool bt_connect(Bt* bt, const uint8_t* address, uint8_t address_type);
+
+/** Disconnect from a BLE peripheral (central role)
+ *
+ * @param bt        Bt instance
+ */
+void bt_disconnect_central(Bt* bt);
+
+/** Get the central connection handle
+ *
+ * @param bt        Bt instance
+ * @return          connection handle, or 0xFFFF if not connected
+ */
+uint16_t bt_get_central_conn_handle(Bt* bt);
 
 #ifdef __cplusplus
 }
