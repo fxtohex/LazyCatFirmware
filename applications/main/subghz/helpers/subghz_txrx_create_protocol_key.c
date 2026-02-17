@@ -14,6 +14,21 @@
 
 #define TAG "SubGhzCreateProtocolKey"
 
+static uint8_t marantec_crc8(uint8_t* data, size_t len) {
+    uint8_t crc = 0x01;
+    size_t i, j;
+    for(i = 0; i < len; i++) {
+        crc ^= data[i];
+        for(j = 0; j < 8; j++) {
+            if((crc & 0x80) != 0)
+                crc = (uint8_t)((crc << 1) ^ 0x1D);
+            else
+                crc <<= 1;
+        }
+    }
+    return crc;
+}
+
 bool subghz_txrx_gen_data_protocol(
     void* context,
     const char* preset_name,
@@ -505,7 +520,7 @@ void subghz_txrx_gen_key_marantec(uint64_t* result_key) {
         full_key_no_crc >> 16,
         full_key_no_crc >> 8};
 
-    uint8_t crc = subghz_protocol_marantec_crc8(tdata, sizeof(tdata));
+    uint8_t crc = marantec_crc8(tdata, sizeof(tdata));
 
     *result_key = ((full_key_no_crc >> 8) << 8) | crc;
 }
